@@ -5,6 +5,7 @@ import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.MemorySection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 
@@ -49,7 +50,7 @@ public class Config {
     private static int fillMemoryTolerance = 500;
     private static boolean preventBlockPlace = false;
     private static boolean preventMobSpawn = false;
-
+    private static Set<ConnectedWorld> connectedWorlds = new HashSet<>();
     // for monitoring plugin efficiency
     //	public static long timeUsed = 0;
 
@@ -532,6 +533,23 @@ public class Config {
         preventBlockPlace = cfg.getBoolean("prevent-block-place");
         preventMobSpawn = cfg.getBoolean("prevent-mob-spawn");
 
+        ConfigurationSection configurationSection = cfg.getConfigurationSection("border-connected-worlds");
+        Set<String> keys = configurationSection.getKeys(false);
+       for (String key : keys) {
+            MemorySection ms = (MemorySection) configurationSection.get(key);
+
+            ConnectedWorld world = new ConnectedWorld(
+                    ms.getString("world-to"),
+                    ms.getString("world-from"),
+                    WBUtils.Direction.valueOf(ms.getString("world-to-enter")),
+                    WBUtils.Direction.valueOf(ms.getString("world-from-exit")),
+                    ms.getDouble("modX"),
+                    ms.getDouble("modZ")
+            );
+            connectedWorlds.add(world);
+
+        }
+
         StartBorderTimer();
 
         borders.clear();
@@ -670,5 +688,15 @@ public class Config {
     }
 
     public static void setBorder(String worldName, double radiusX, double radiusZ, double x, double z) {
+    }
+
+    public static ConnectedWorld FindConnectedWorld(String worldName, WBUtils.Direction direction) {
+        for (ConnectedWorld connectedWorld : connectedWorlds) {
+            if (direction == connectedWorld.getWorldFromExitDiration()
+                    && worldName.equalsIgnoreCase(connectedWorld.getWorldFrom())) {
+                return connectedWorld;
+            }
+        }
+        return null;
     }
 }

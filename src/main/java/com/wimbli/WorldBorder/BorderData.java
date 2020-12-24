@@ -1,9 +1,6 @@
 package com.wimbli.WorldBorder;
 
-import org.bukkit.Chunk;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 
 import java.util.EnumSet;
 
@@ -317,8 +314,11 @@ public class BorderData {
         double xLoc = loc.getX();
         double zLoc = loc.getZ();
         double yLoc = loc.getY();
-
+        String world = loc.getWorld().getName();
+        // -z = north +z = south -x = west +x = east
         // square border
+        World worldTo = loc.getWorld();
+
         if (!round) {
             if (wrapping) {
                 if (xLoc <= minX)
@@ -330,17 +330,71 @@ public class BorderData {
                 else if (zLoc >= maxZ)
                     zLoc = minZ + Config.KnockBack();
             } else {
-                if (xLoc <= minX)
-                    xLoc = minX + Config.KnockBack();
-                else if (xLoc >= maxX)
-                    xLoc = maxX - Config.KnockBack();
-                if (zLoc <= minZ)
-                    zLoc = minZ + Config.KnockBack();
-                else if (zLoc >= maxZ)
-                    zLoc = maxZ - Config.KnockBack();
+
+                WBUtils.Direction direction = null;
+                if (xLoc <= minX) {
+                    xLoc = minX + Config.KnockBack(); //west
+                    direction = WBUtils.Direction.W;
+                } else if (xLoc >= maxX) {
+                    xLoc = maxX - Config.KnockBack(); //east
+                    direction = WBUtils.Direction.E;
+                }
+                if (zLoc <= minZ) {
+                    zLoc = minZ + Config.KnockBack(); //north
+                    direction = WBUtils.Direction.N;
+                } else if (zLoc >= maxZ) {
+                    zLoc = maxZ - Config.KnockBack(); //south
+                    direction = WBUtils.Direction.S;
+                }
+
+                ConnectedWorld connectedWorld = Config.FindConnectedWorld(loc.getWorld().getName().toLowerCase(), direction);
+                if (connectedWorld != null) {
+                    world = connectedWorld.getWorldTo();
+
+                    worldTo = Bukkit.getWorld(world);
+                    if (worldTo == null) {
+                        worldTo = loc.getWorld();
+                    }
+
+                    WBUtils.Direction worldToEnterDirection = connectedWorld.getWorldToEnterDirection();
+                    BorderData borderData = Config.getBorders().get(worldTo.getName());
+                    if (worldToEnterDirection == null || borderData == null) {
+                        return worldTo.getSpawnLocation();
+                    } else {
+
+                        if (worldToEnterDirection == WBUtils.Direction.N) {
+                            zLoc = borderData.maxZ - Config.KnockBack();
+                            xLoc = -((xLoc/(maxX-minX))*(borderData.maxX- borderData.minX));
+                        } else if (worldToEnterDirection == WBUtils.Direction.W) {
+                            zLoc = borderData.maxZ - Config.KnockBack();
+                            xLoc = ((xLoc/(maxZ-minZ))*(borderData.maxZ- borderData.minZ));
+
+                        } else if (worldToEnterDirection == WBUtils.Direction.E) {
+                            zLoc = borderData.minZ + Config.KnockBack();
+                            xLoc = -((xLoc/(maxZ-minZ))*(borderData.maxZ- borderData.minZ));
+                        } else  /*if (worldToEnterDirection == WBUtils.Direction.S) */ {
+                            zLoc = borderData.minZ + Config.KnockBack();
+                            xLoc = ((xLoc/(maxX-minX))*(borderData.maxX- borderData.minX));
+                        }
+
+                        float yaw = worldToEnterDirection.defaultYaw;
+
+                        int ixLoc = Location.locToBlock(xLoc);
+                        int izLoc = Location.locToBlock(zLoc);
+
+                        Chunk tChunk = worldTo.getChunkAt(CoordXZ.blockToChunk(ixLoc), CoordXZ.blockToChunk(izLoc));
+                        if (!tChunk.isLoaded())
+                            tChunk.load();
+
+                        yLoc = getSafeY(worldTo, ixLoc, Location.locToBlock(yLoc), izLoc, flying);
+                        if (yLoc == -1)
+                            return null;
+                        return new Location(worldTo, Math.floor(xLoc) + 0.5, yLoc, Math.floor(zLoc) + 0.5, yaw, loc.getPitch());
+
+                    }
+                }
             }
         }
-
         // round border
         else {
             // algorithm originally from: http://stackoverflow.com/questions/300871/best-way-to-find-a-point-on-a-circle-closest-to-a-given-point
@@ -365,15 +419,16 @@ public class BorderData {
         int izLoc = Location.locToBlock(zLoc);
 
         // Make sure the chunk we're checking in is actually loaded
-        Chunk tChunk = loc.getWorld().getChunkAt(CoordXZ.blockToChunk(ixLoc), CoordXZ.blockToChunk(izLoc));
+
+        Chunk tChunk = worldTo.getChunkAt(CoordXZ.blockToChunk(ixLoc), CoordXZ.blockToChunk(izLoc));
         if (!tChunk.isLoaded())
             tChunk.load();
 
-        yLoc = getSafeY(loc.getWorld(), ixLoc, Location.locToBlock(yLoc), izLoc, flying);
+        yLoc = getSafeY(worldTo, ixLoc, Location.locToBlock(yLoc), izLoc, flying);
         if (yLoc == -1)
             return null;
 
-        return new Location(loc.getWorld(), Math.floor(xLoc) + 0.5, yLoc, Math.floor(zLoc) + 0.5, loc.getYaw(), loc.getPitch());
+        return new Location(worldTo, Math.floor(xLoc) + 0.5, yLoc, Math.floor(zLoc) + 0.5, loc.getYaw(), loc.getPitch());
     }
 
     public Location correctedPosition(Location loc, boolean round) {
